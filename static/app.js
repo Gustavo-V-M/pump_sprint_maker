@@ -3,9 +3,8 @@
 const $ = (id) => document.getElementById(id);
 
 const state = {
-  mixes: [],
-  catalog: null, // { songs: [...], chartIndex: {...} } for selected mix
-  selected: new Set(),
+  catalog: null, // { songs: [{name, charts: [...]}], byId: {id: chart} }
+  selected: new Set(), // chart ids
   sprint: null,
   serverOffsetMs: 0,
   timerHandle: null,
@@ -61,88 +60,63 @@ function fmtDuration(seconds) {
 
 /* ---------------------------------------------------------------- setup */
 
-async function loadMixes() {
-  const { mixes } = await api("/api/mixes");
-  state.mixes = mixes;
-  const select = $("mix-select");
-  select.innerHTML = "";
-  const primary = mixes.filter((m) => m.isPrimary);
-  const others = mixes.filter((m) => !m.isPrimary);
-  if (primary.length && others.length) {
-    const g1 = document.createElement("optgroup");
-    g1.label = "Main mixes";
-    primary.forEach((m) => g1.append(new Option(m.displayName, m.name)));
-    const g2 = document.createElement("optgroup");
-    g2.label = "More";
-    others.forEach((m) => g2.append(new Option(m.displayName, m.name)));
-    select.append(g1, g2);
-  } else {
-    mixes.forEach((m) => select.append(new Option(m.displayName, m.name)));
+async function loadCharts() {
+  const data = await api("/api/charts");
+  const byId = {};
+  for (const s of data.songs) {
+    for (const c of s.charts) byId[c.id] = { ...c, song: s.name };
   }
-  select.addEventListener("change", () => loadSongs(select.value));
+  state.catalog = { songs: data.songs, byId };
+  const songSelect = $("song-select");
+  songSelect.innerHTML = "";
+  for (const s of data.songs) songSelect.append(new Option(s.name, s.name));
+  fillChartSelect();
 }
 
-async function loadSongs(mix) {
-  $("song-list").innerHTML = '<div class="muted loading">Loading songs...</div>';
-  try {
-    state.catalog = await api(`/api/songs?mix=${encodeURIComponent(mix)}`);
-  } catch (err) {
-    $("song-list").innerHTML = "";
-    showError("setup-error", err.message);
+function fillChartSelect() {
+  const chartSelect = $("chart-select");
+  chartSelect.innerHTML = "";
+  const song = (state.catalog?.songs || []).find((s) => s.name === $("song-select").value);
+  if (!song) {
+    chartSelect.disabled = true;
+    $("add-chart-btn").disabled = true;
     return;
   }
-  state.selected.clear();
-  renderSongList("");
+  for (const c of song.charts) chartSelect.append(new Option(`${c.type}${c.level}`, c.id));
+  chartSelect.disabled = false;
+  $("add-chart-btn").disabled = false;
 }
 
-function matches(song, q) {
-  return !q || song.name.toLowerCase().includes(q) || (song.artist || "").toLowerCase().includes(q);
+function addChart() {
+  const id = $("chart-select").value;
+  if (!id || state.selected.has(id)) return;
+  state.selected.add(id);
+  renderSelectedCharts();
 }
 
-function renderSongList(query) {
-  const list = $("song-list");
-  list.innerHTML = "";
-  const q = query.trim().toLowerCase();
-  const songs = (state.catalog?.songs || []).filter((s) => matches(s, q));
-  if (!songs.length) {
-    list.innerHTML = '<div class="muted">No songs match.</div>';
-    updateSongCount();
-    return;
+function removeChart(id) {
+  state.selected.delete(id);
+  renderSelectedCharts();
+}
+
+function renderSelectedCharts() {
+  const wrap = $("selected-charts");
+  wrap.innerHTML = "";
+  for (const id of state.selected) {
+    const c = state.catalog.byId[id];
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.append(Object.assign(document.createElement("span"), { textContent: `${c.song} · ${c.type}${c.level}` }));
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "chip-remove";
+    x.textContent = "×";
+    x.addEventListener("click", () => removeChart(id));
+    chip.append(x);
+    wrap.append(chip);
   }
-  for (const song of songs) {
-    const label = document.createElement("label");
-    label.className = "song-item" + (state.selected.has(song.name) ? " selected" : "");
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = state.selected.has(song.name);
-    input.addEventListener("change", () => {
-      if (input.checked) state.selected.add(song.name);
-      else state.selected.delete(song.name);
-      label.classList.toggle("selected", input.checked);
-      updateSongCount();
-    });
-    const text = document.createElement("span");
-    text.className = "song-name";
-    const chartLevels = song.charts
-      .map((c) => c.level)
-      .filter((l) => l != null)
-      .sort((a, b) => b - a);
-    text.textContent = song.name;
-    const meta = document.createElement("span");
-    meta.className = "muted";
-    meta.textContent =
-      (song.artist ? song.artist + " · " : "") +
-      (chartLevels.length ? `S${chartLevels[0]}` : song.type || "");
-    label.append(input, text, meta);
-    list.append(label);
-  }
-  updateSongCount();
-}
-
-function updateSongCount() {
-  const n = state.selected.size;
-  $("song-count").textContent = n ? `· ${n} selected` : "";
-  $("start-btn").disabled = n === 0;
+  $("chart-count").textContent = state.selected.size ? `· ${state.selected.size} selected` : "";
+  $("start-btn").disabled = state.selected.size === 0;
 }
 
 /* ---------------------------------------------------------------- sprint */
@@ -152,12 +126,12 @@ function selectedDuration() {
   return w * 604800;
 }
 
-async function startSprint({ mix, songs, durationSeconds }) {
+async function startSprint({ charts, durationSeconds }) {
   hideError("setup-error");
   try {
     const { sprint } = await api("/api/sprint", {
       method: "POST",
-      body: JSON.stringify({ mix, songs, durationSeconds }),
+      body: JSON.stringify({ charts, durationSeconds }),
     });
     enterActive(sprint);
   } catch (err) {
@@ -301,7 +275,7 @@ function renderResults(data) {
     return `
       <div class="play-row ${cls}">
         <span class="play-song">${escapeHtml(p.songName)}</span>
-        <span class="muted">S${p.level ?? "?"} ${escapeHtml(p.chartType || "")} ${escapeHtml(p.difficulty || "")}</span>
+        <span class="muted">${escapeHtml((p.chartType || "") + String(p.level ?? "?"))}</span>
         <span class="play-score">${p.score != null ? escapeHtml(p.score.toLocaleString()) : "—"}</span>
         <span>${escapeHtml(p.letterGrade || "")} ${escapeHtml(p.plate || "")}</span>
         <span class="muted">${escapeHtml(judgments)}</span>
@@ -358,8 +332,7 @@ async function boot() {
   }
   showView("setup");
   try {
-    await loadMixes();
-    if (state.mixes.length) await loadSongs($("mix-select").value);
+    await loadCharts();
   } catch (err) {
     showError("setup-error", err.message);
   }
@@ -375,33 +348,22 @@ $("setup-form").addEventListener("submit", (e) => {
     return;
   }
   if (state.selected.size === 0) {
-    showError("setup-error", "Pick at least one song.");
+    showError("setup-error", "Pick at least one chart.");
     return;
   }
   startSprint({
-    mix: $("mix-select").value,
-    songs: [...state.selected],
+    charts: [...state.selected],
     durationSeconds: duration,
   });
 });
 
-$("song-search").addEventListener("input", (e) => renderSongList(e.target.value));
-$("select-all").addEventListener("click", () => {
-  const q = $("song-search").value.trim().toLowerCase();
-  (state.catalog?.songs || []).forEach((s) => {
-    if (matches(s, q)) state.selected.add(s.name);
-  });
-  renderSongList(q);
-});
-$("clear-all").addEventListener("click", () => {
-  state.selected.clear();
-  renderSongList($("song-search").value);
-});
 document.querySelectorAll(".presets button").forEach((btn) => {
   btn.addEventListener("click", () => {
     $("duration-weeks").value = btn.dataset.weeks;
   });
 });
+$("song-select").addEventListener("change", fillChartSelect);
+$("add-chart-btn").addEventListener("click", addChart);
 $("end-early-btn").addEventListener("click", async () => {
   clearInterval(state.timerHandle);
   clearInterval(state.scoresHandle);
@@ -417,8 +379,7 @@ $("new-sprint-btn").addEventListener("click", async () => {
   showView("setup");
   hideError("setup-error");
   try {
-    if (!state.mixes.length) await loadMixes();
-    if ($("mix-select").value) await loadSongs($("mix-select").value);
+    if (!state.catalog) await loadCharts();
   } catch (err) {
     showError("setup-error", err.message);
   }
@@ -426,7 +387,7 @@ $("new-sprint-btn").addEventListener("click", async () => {
 $("repeat-sprint-btn").addEventListener("click", () => {
   const s = state.sprint;
   if (!s) return;
-  startSprint({ mix: s.mix, songs: s.songs, durationSeconds: s.durationSeconds });
+  startSprint({ charts: s.charts, durationSeconds: s.durationSeconds });
 });
 
 boot();

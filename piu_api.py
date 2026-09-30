@@ -1,12 +1,11 @@
 """Client for the PIU Scores API (https://piuscores.arroweclip.se).
 
-Handles bearer-token auth from the environment, cursor paging, and an
-in-memory TTL cache for catalog data (mixes, songs, charts).
+Handles HTTP Basic auth from the environment, cursor paging, and player
+resolution for the journal endpoint.
 """
 
 import logging
 import os
-import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -49,9 +48,6 @@ class PiuClient:
         # HTTP Basic auth: the API ignores the username; the token is the password.
         self._session.auth = ("piu-sprints", token)
         self._session.headers.update({"Accept": "application/json"})
-        self._cache = {}
-        self._cache_ttl = int(os.environ.get("PIU_CACHE_TTL_SECONDS", "3600"))
-        self._lock = threading.RLock()
         self._player_id = os.environ.get("PIU_SCORES_PLAYER_ID", "").strip() or None
 
     # ------------------------------------------------------------------ core
@@ -83,66 +79,6 @@ class PiuClient:
                 break
             url, params = next_url, None
         return rows
-
-    def _cached(self, key, loader):
-        with self._lock:
-            entry = self._cache.get(key)
-            now = time.monotonic()
-            if entry and now - entry[0] < self._cache_ttl:
-                return entry[1]
-            value = loader()
-            self._cache[key] = (now, value)
-            return value
-
-    # ------------------------------------------------------------- catalogs
-
-    def mixes(self):
-        def load():
-            rows = self._get_paged("/api/v2/mixes", {"limit": 500})
-            return [
-                {
-                    "name": r.get("name"),
-                    "displayName": r.get("displayName") or r.get("name"),
-                    "isPrimary": bool(r.get("isPrimary")),
-                }
-                for r in rows
-                if r.get("name")
-            ]
-
-        return self._cached("mixes", load)
-
-    def song_catalog(self, mix):
-        """Songs on a mix joined with their charts, sorted for a dropdown.
-
-        Returns {songs: [{name, artist, durationSeconds, bpm, imageUrl,
-                          charts: [{id, level, type, difficulty, noteCount,
-                                    imageUrl, stepArtist}]}, ...],
-                 chartIndex: {chartId: chartInfo}, errors: []}
-        """
-        def load():
-            songs = self._get_paged("/api/v2/songs", {"mix": mix, "limit": 500})
-            charts = self._get_paged("/api/v2/charts", {"mix": mix, "limit": 500})
-            by_song = {s.get("name"): dict(s, charts=[]) for s in songs if s.get("name")}
-            chart_index = {}
-            for c in charts:
-                name = c.get("songName")
-                chart = {
-                    "id": c.get("id"),
-                    "level": c.get("level"),
-                    "type": c.get("type"),
-                    "difficulty": c.get("difficulty"),
-                    "noteCount": c.get("noteCount"),
-                    "imageUrl": c.get("imageUrl"),
-                    "stepArtist": c.get("stepArtist"),
-                }
-                if c.get("id"):
-                    chart_index[c["id"]] = dict(chart, songName=name)
-                if name in by_song:
-                    by_song[name]["charts"].append(chart)
-            catalog = sorted(by_song.values(), key=lambda s: s["name"].lower())
-            return {"songs": catalog, "chartIndex": chart_index}
-
-        return self._cached(f"catalog:{mix}", load)
 
     # --------------------------------------------------------------- players
 

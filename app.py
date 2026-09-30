@@ -3,14 +3,14 @@
 Routes:
   GET  /                    -> single-page UI
   GET  /api/health          -> liveness + token check
-  GET  /api/mixes           -> mix list for the setup form
-  GET  /api/songs?mix=...   -> song catalog (dropdown) with chart ids
+  GET  /api/charts          -> song/chart catalog from charts_phoenix-2.csv
   GET  /api/sprint          -> current/last sprint + server time
   POST /api/sprint          -> start a new sprint
   POST /api/sprint/end      -> end the active sprint early
-  GET  /api/sprint/scores   -> plays on the sprint's songs inside its window
+  GET  /api/sprint/scores   -> plays on the sprint's charts inside its window
 """
 
+import csv
 import logging
 import os
 import threading
@@ -26,9 +26,35 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 app = Flask(__name__)
 
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
+CHARTS_CSV = os.path.join(os.path.dirname(__file__), "charts_phoenix-2.csv")
 GRACE_MINUTES = int(os.environ.get("PIU_SCORES_GRACE_MINUTES", "10"))
 MIN_SPRINT_SECONDS = 10
 MAX_SPRINT_SECONDS = 28 * 86400
+
+
+def _load_charts():
+    """Parse the chart export into {song: [charts]} and {chartId: chart}."""
+    by_song, by_id = {}, {}
+    with open(CHARTS_CSV, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            cid, song = row["ChartId"].strip(), row["Song"].strip()
+            if not cid or not song or cid in by_id:
+                continue
+            chart = {
+                "id": cid,
+                "song": song,
+                "type": row["Type"].strip(),
+                "level": int(row["Level"]),
+                "mix": row["Mix"].strip(),
+            }
+            by_id[cid] = chart
+            by_song.setdefault(song, []).append(chart)
+    for charts in by_song.values():
+        charts.sort(key=lambda c: (c["type"], c["level"]))
+    return by_song, by_id
+
+
+_charts_by_song, _charts_by_id = _load_charts()
 
 store = SprintStore(DATA_DIR)
 _client = None
@@ -78,24 +104,13 @@ def health():
     return jsonify({"ok": True})
 
 
-@app.get("/api/mixes")
-def mixes():
-    try:
-        return jsonify({"mixes": get_client().mixes()})
-    except PiuApiError as exc:
-        return _error(str(exc), exc.status_code or 502)
-
-
-@app.get("/api/songs")
-def songs():
-    mix = request.args.get("mix", "").strip()
-    if not mix:
-        return _error("Query parameter 'mix' is required.")
-    try:
-        catalog = get_client().song_catalog(mix)
-    except PiuApiError as exc:
-        return _error(str(exc), exc.status_code or 502)
-    return jsonify(catalog)
+@app.get("/api/charts")
+def charts_catalog():
+    payload = [
+        {"name": song, "charts": [{"id": c["id"], "type": c["type"], "level": c["level"]} for c in charts]}
+        for song, charts in sorted(_charts_by_song.items())
+    ]
+    return jsonify({"songs": payload})
 
 
 @app.get("/api/sprint")
@@ -108,15 +123,12 @@ def current_sprint():
 @app.post("/api/sprint")
 def create_sprint():
     body = request.get_json(silent=True) or {}
-    mix = str(body.get("mix", "")).strip()
-    songs = body.get("songs")
+    charts = body.get("charts")
     duration = body.get("durationSeconds")
 
-    if not mix:
-        return _error("Pick a mix.")
-    if not isinstance(songs, list) or not songs or not all(isinstance(s, str) and s.strip() for s in songs):
-        return _error("Pick at least one song.")
-    songs = sorted({s.strip() for s in songs})
+    if not isinstance(charts, list) or not charts or not all(isinstance(c, str) and c.strip() for c in charts):
+        return _error("Pick at least one chart.")
+    charts = sorted(set(charts))
     if not isinstance(duration, int) or isinstance(duration, bool):
         return _error("Duration must be a number of seconds.")
     if not MIN_SPRINT_SECONDS <= duration <= MAX_SPRINT_SECONDS:
@@ -125,21 +137,16 @@ def create_sprint():
             f"{MAX_SPRINT_SECONDS // 86400} days."
         )
 
-    # Songs must exist on the chosen mix so the score fetch can match charts.
-    try:
-        client = get_client()
-        catalog = client.song_catalog(mix)
-    except PiuApiError as exc:
-        return _error(str(exc), exc.status_code or 502)
-    known = {s["name"] for s in catalog["songs"]}
-    unknown = [s for s in songs if s not in known]
+    unknown = [c for c in charts if c not in _charts_by_id]
     if unknown:
-        return _error(f"Unknown song(s) on {mix}: {', '.join(unknown)}")
+        return _error(f"Unknown chart id(s): {', '.join(unknown[:5])}")
 
-    sprint = store.create(mix, songs, duration)
+    mix = _charts_by_id[charts[0]]["mix"]
+    songs = sorted({_charts_by_id[c]["song"] for c in charts})
+    sprint = store.create(mix, songs, charts, duration)
     app.logger.info(
-        "sprint %s started: mix=%s songs=%d duration=%ds",
-        sprint["id"], mix, len(songs), duration,
+        "sprint %s started: mix=%s charts=%d duration=%ds",
+        sprint["id"], mix, len(charts), duration,
     )
     return jsonify({"sprint": sprint}), 201
 
@@ -164,20 +171,17 @@ def sprint_scores():
     if not sprint:
         return _error("No sprint yet.", 404)
 
-    try:
-        client = get_client()
-        catalog = client.song_catalog(sprint["mix"])
-    except PiuApiError as exc:
-        return _error(str(exc), exc.status_code or 502)
-
-    selected = set(sprint["songs"])
-    chart_index = catalog["chartIndex"]
-    selected_chart_ids = {
-        cid for cid, c in chart_index.items() if c["songName"] in selected
-    }
+    # New sprints store the exact chart ids; legacy sprints (pre-chart export)
+    # count every chart of the songs they named.
+    if sprint["charts"]:
+        selected = set(sprint["charts"])
+    else:
+        songs = set(sprint["songs"])
+        selected = {cid for cid, c in _charts_by_id.items() if c["song"] in songs}
 
     start, end = _sprint_window(sprint)
     try:
+        client = get_client()
         plays = client.plays_since(sprint["mix"], start)
     except PiuApiError as exc:
         return _error(str(exc), exc.status_code or 502)
@@ -187,17 +191,15 @@ def sprint_scores():
         occurred = play.get("_occurredAt")
         if occurred is None or not (start <= occurred <= end):
             continue
-        chart = chart_index.get(str(play.get("chartId")))
-        if not chart or chart["songName"] not in selected:
+        chart = _charts_by_id.get(str(play.get("chartId")))
+        if not chart or chart["id"] not in selected:
             continue
         rows.append(
             {
                 "chartId": play.get("chartId"),
-                "songName": chart["songName"],
+                "songName": chart["song"],
                 "level": chart["level"],
                 "chartType": chart["type"],
-                "difficulty": chart["difficulty"],
-                "imageUrl": chart.get("imageUrl"),
                 "score": play.get("score"),
                 "letterGrade": play.get("letterGrade"),
                 "plate": play.get("plate"),

@@ -19,18 +19,13 @@
 
       <form id="setup-form">
         <div class="field">
-          <label for="mix-select">Mix</label>
-          <select id="mix-select" required></select>
-        </div>
-
-        <div class="field">
-          <label>Songs <span id="song-count" class="muted"></span></label>
-          <input id="song-search" type="search" placeholder="Search songs..." autocomplete="off" />
-          <div class="picker-tools">
-            <button type="button" id="select-all">Select all</button>
-            <button type="button" id="clear-all">Clear</button>
+          <label>Chart <span id="chart-count" class="muted"></span></label>
+          <div class="chart-picker">
+            <select id="song-select"></select>
+            <select id="chart-select" disabled></select>
+            <button type="button" id="add-chart-btn" disabled>Add</button>
           </div>
-          <div id="song-list" class="song-list"></div>
+          <div id="selected-charts" class="selected-charts"></div>
         </div>
 
         <div class="field">

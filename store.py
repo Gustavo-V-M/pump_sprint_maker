@@ -20,6 +20,7 @@ def sprint_to_dict(row):
         "id": row["id"],
         "mix": row["mix"],
         "songs": json.loads(row["songs"]),
+        "charts": json.loads(row["charts"]) if row["charts"] else [],
         "durationSeconds": row["duration_seconds"],
         "startedAt": row["started_at"],
         "endedAt": row["ended_at"],
@@ -39,6 +40,7 @@ class SprintStore:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     mix TEXT NOT NULL,
                     songs TEXT NOT NULL,
+                    charts TEXT,
                     duration_seconds INTEGER NOT NULL,
                     started_at TEXT NOT NULL,
                     ended_at TEXT,
@@ -46,6 +48,9 @@ class SprintStore:
                 )
                 """
             )
+            cols = {r[1] for r in db.execute("PRAGMA table_info(sprints)")}
+            if "charts" not in cols:
+                db.execute("ALTER TABLE sprints ADD COLUMN charts TEXT")
             db.commit()
 
     def _connect(self):
@@ -53,7 +58,7 @@ class SprintStore:
         db.row_factory = sqlite3.Row
         return db
 
-    def create(self, mix, songs, duration_seconds):
+    def create(self, mix, songs, charts, duration_seconds):
         started = utcnow_iso()
         with self._lock, closing(self._connect()) as db:
             # End any stray active sprint first; only one is live at a time.
@@ -63,9 +68,9 @@ class SprintStore:
                 (started,),
             )
             cur = db.execute(
-                "INSERT INTO sprints (mix, songs, duration_seconds, started_at) "
-                "VALUES (?, ?, ?, ?)",
-                (mix, json.dumps(songs), duration_seconds, started),
+                "INSERT INTO sprints (mix, songs, charts, duration_seconds, started_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (mix, json.dumps(songs), json.dumps(charts), duration_seconds, started),
             )
             db.commit()
         return self.get(cur.lastrowid)
