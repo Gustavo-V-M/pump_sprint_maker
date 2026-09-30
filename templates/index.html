@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pump Sprints</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <main id="app">
+    <!-- ============ SETUP ============ -->
+    <section id="view-setup" class="view hidden">
+      <header class="hero">
+        <h1>PUMP SPRINTS</h1>
+        <p class="tagline">Short timed sets. Pick your songs. Beat your bests.</p>
+      </header>
+
+      <div id="setup-error" class="banner error hidden"></div>
+
+      <form id="setup-form">
+        <div class="field">
+          <label for="mix-select">Mix</label>
+          <select id="mix-select" required></select>
+        </div>
+
+        <div class="field">
+          <label>Songs <span id="song-count" class="muted"></span></label>
+          <input id="song-search" type="search" placeholder="Search songs..." autocomplete="off" />
+          <div class="picker-tools">
+            <button type="button" id="select-all">Select all</button>
+            <button type="button" id="clear-all">Clear</button>
+          </div>
+          <div id="song-list" class="song-list"></div>
+        </div>
+
+        <div class="field">
+          <label>Sprint length</label>
+          <div class="duration-row">
+            <div class="duration-input">
+              <input id="duration-min" type="number" min="0" max="120" step="1" value="5" />
+              <span>min</span>
+            </div>
+            <div class="duration-input">
+              <input id="duration-sec" type="number" min="0" max="59" step="1" value="0" />
+              <span>sec</span>
+            </div>
+          </div>
+          <div class="presets">
+            <button type="button" data-seconds="60">1:00</button>
+            <button type="button" data-seconds="90">1:30</button>
+            <button type="button" data-seconds="120">2:00</button>
+            <button type="button" data-seconds="180">3:00</button>
+            <button type="button" data-seconds="300">5:00</button>
+            <button type="button" data-seconds="600">10:00</button>
+          </div>
+        </div>
+
+        <button id="start-btn" type="submit" class="primary big">START SPRINT</button>
+      </form>
+    </section>
+
+    <!-- ============ ACTIVE ============ -->
+    <section id="view-active" class="view hidden">
+      <div id="active-error" class="banner error hidden"></div>
+      <p class="mix-label" id="active-mix"></p>
+      <div class="timer" id="timer">00:00</div>
+      <div class="progress"><div id="progress-bar"></div></div>
+      <div class="active-stats" id="active-stats">
+        <span id="active-plays">0 plays</span>
+        <span id="active-status">Loading scores...</span>
+      </div>
+      <div id="song-chips" class="song-chips"></div>
+      <button id="end-early-btn" class="danger">End sprint early</button>
+    </section>
+
+    <!-- ============ RESULTS ============ -->
+    <section id="view-results" class="view hidden">
+      <div id="result-error" class="banner error hidden"></div>
+      <h1 id="results-title">SPRINT COMPLETE</h1>
+      <p class="tagline" id="results-sub"></p>
+
+      <div id="results-summary" class="results-grid"></div>
+      <h2>Plays</h2>
+      <div id="plays-table" class="plays"></div>
+
+      <div class="results-actions">
+        <button id="new-sprint-btn" class="primary big">CREATE ANOTHER SPRINT</button>
+        <button id="repeat-sprint-btn">Repeat this sprint</button>
+      </div>
+    </section>
+
+    <!-- ============ BOOT ============ -->
+    <section id="view-boot" class="view">
+      <div class="timer muted">...</div>
+      <p class="tagline">Connecting to PIU Scores...</p>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+services:
+  pump-sprints:
+    build: .
+    image: pump-sprints
+    ports:
+      - "8000:8000"
+    environment:
+      # The PIU Scores API token. Set it in a .env file next to this file
+      # (see .env.example) or export it in your shell before `docker compose up`.
+      PIU_SCORES_TOKEN: ${PIU_SCORES_TOKEN:?Set PIU_SCORES_TOKEN in your environment or .env file}
+      # Optional overrides:
+      # PIU_SCORES_URL: https://piuscores.arroweclip.se
+      # PIU_SCORES_PLAYER_ID: <pin a specific player id if your token can see several>
+    restart: unless-stopped
+    volumes:
+      - pump-sprint-data:/app/data
+
+volumes:
+  pump-sprint-data:
