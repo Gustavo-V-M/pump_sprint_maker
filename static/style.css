@@ -195,12 +195,32 @@ button.danger {
   margin-bottom: 18px;
 }
 
-.song-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
-  margin-bottom: 8px;
+.grid-wrap { overflow-x: auto; margin-bottom: 8px; }
+#score-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+#score-grid th,
+#score-grid td {
+  border: 1px solid #322a52;
+  padding: 6px 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+#score-grid th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.8em;
+  background: var(--panel);
+}
+#score-grid td:first-child { text-align: left; font-weight: 600; }
+#score-grid td.broken { color: var(--warn); }
+#score-grid td.best {
+  color: var(--accent-2);
+  font-weight: 800;
+  background: rgba(55, 226, 213, 0.08);
 }
 .chip {
   background: var(--panel);
@@ -209,7 +229,6 @@ button.danger {
   border-radius: 999px;
   font-size: 0.9rem;
 }
-.chip.played { border-color: var(--accent-2); color: var(--accent-2); }
 
 /* ---------------- results ---------------- */
 

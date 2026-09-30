@@ -49,6 +49,7 @@ class PiuClient:
         self._session.auth = ("piu-sprints", token)
         self._session.headers.update({"Accept": "application/json"})
         self._player_id = os.environ.get("PIU_SCORES_PLAYER_ID", "").strip() or None
+        self._mix_params = {}  # stored/display mix -> API enum name
 
     # ------------------------------------------------------------------ core
 
@@ -60,9 +61,12 @@ class PiuClient:
             time.sleep(2)
             return self._get(path, params, retries - 1)
         if resp.status_code != 200:
-            log.warning("PIU API %s for %s", resp.status_code, url)
+            # Include the body: validation errors (400) carry ProblemDetails
+            # naming the bad parameter, which is the whole debug story.
+            detail = (resp.text or "").strip()[:300]
+            log.warning("PIU API %s for %s: %s", resp.status_code, url, detail)
             raise PiuApiError(
-                f"PIU Scores API returned {resp.status_code} for {url}",
+                f"PIU Scores API returned {resp.status_code} for {url}: {detail}",
                 status_code=resp.status_code,
             )
         return resp.json()
@@ -111,12 +115,40 @@ class PiuClient:
 
     # --------------------------------------------------------------- journal
 
+    def _mix_param(self, mix):
+        """Map a mix value to the enum name the `mix` query param requires.
+
+        Sprint mixes come from the chart export's display-style name
+        ("Phoenix 2"); older sprints may already hold an enum name.
+        """
+        if mix in self._mix_params:
+            return self._mix_params[mix]
+        rows = self._get_paged("/api/v2/mixes", {"limit": 500})
+
+        def norm(s):
+            return (s or "").replace(" ", "").lower()
+
+        target = norm(mix)
+        for r in rows:
+            name = r.get("name")
+            if not name:
+                continue
+            if name == mix or norm(name) == target or norm(r.get("displayName")) == target:
+                log.info("mix %r -> enum name %r", mix, name)
+                self._mix_params[mix] = name
+                return name
+        raise PiuApiError(f"Mix {mix!r} not found in /api/v2/mixes", 400)
+
     def plays_since(self, mix, since):
         """Every journal play on a mix at or after `since` (aware datetime)."""
         player = self.player_id()
         rows = self._get_paged(
             f"/api/v2/players/{player}/journal",
-            {"mix": mix, "since": since.strftime("%Y-%m-%dT%H:%M:%SZ"), "limit": 500},
+            {
+                "mix": self._mix_param(mix),
+                "since": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "limit": 500,
+            },
             max_pages=8,
         )
         for r in rows:

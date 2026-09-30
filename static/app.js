@@ -143,7 +143,6 @@ function enterActive(sprint) {
   state.sprint = sprint;
   state.finished = false;
   $("active-mix").textContent = sprint.mix;
-  renderChips(sprint.songs);
   showView("active");
   tickTimer();
   clearInterval(state.timerHandle);
@@ -151,17 +150,6 @@ function enterActive(sprint) {
   clearInterval(state.scoresHandle);
   refreshActiveScores();
   state.scoresHandle = setInterval(refreshActiveScores, 20000);
-}
-
-function renderChips(songs) {
-  const wrap = $("song-chips");
-  wrap.innerHTML = "";
-  for (const song of songs) {
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    chip.textContent = song;
-    wrap.append(chip);
-  }
 }
 
 function sprintEndMs(sprint) {
@@ -192,19 +180,76 @@ async function refreshActiveScores() {
     const plays = data.plays || [];
     $("active-plays").textContent = `${plays.length} play${plays.length === 1 ? "" : "s"} so far`;
     $("active-status").textContent = "Scores syncing with PIU Scores";
-    for (const [song, sum] of Object.entries(data.summary || {})) {
-      const chip = [...document.querySelectorAll("#song-chips .chip")].find(
-        (c) => c.textContent === song
-      );
-      if (chip && sum.attempts > 0) {
-        const best = sum.bestScore != null ? sum.bestScore.toLocaleString() : "—";
-        chip.textContent = `${song} · ${sum.attempts}× · best ${best}`;
-        chip.classList.add("played");
-      }
-    }
+    renderScoreGrid(data);
   } catch (err) {
     $("active-status").textContent = "Score sync failed: " + err.message;
   }
+}
+
+function localDayKey(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function dayLabel(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function buildGrid(data) {
+  const charts = [...(data.charts || [])].sort(
+    (a, b) =>
+      (a.type === "S" ? 0 : 1) - (b.type === "S" ? 0 : 1) ||
+      a.song.localeCompare(b.song) ||
+      a.type.localeCompare(b.type) ||
+      a.level - b.level
+  );
+  const days = [];
+  const best = new Map(); // chartId -> Map(dayKey -> {score, broken})
+  for (const p of data.plays || []) {
+    if (p.score == null || !p.occurredAt) continue;
+    const key = localDayKey(p.occurredAt);
+    if (!days.includes(key)) days.push(key);
+    const byDay = best.get(p.chartId) || new Map();
+    best.set(p.chartId, byDay);
+    const cur = byDay.get(key);
+    const broken = !!p.isBroken || !!p.isStageBroken;
+    // A passing score always beats a broken one on the same day.
+    if (!cur || (cur.broken && !broken) || (cur.broken === broken && p.score > cur.score)) {
+      byDay.set(key, { score: p.score, broken });
+    }
+  }
+  days.sort();
+  const rows = charts.map((c) => {
+    const byDay = best.get(c.id) || new Map();
+    const cells = days.map((d) => {
+      const v = byDay.get(d);
+      return v ? { score: v.score, broken: v.broken } : null;
+    });
+    const rowBest = Math.max(...cells.filter(Boolean).map((v) => v.score), -1);
+    return { song: c.song, chart: `${c.type}${c.level}`, cells, rowBest };
+  });
+  return { days, rows };
+}
+
+function renderScoreGrid(data) {
+  const { days, rows } = buildGrid(data);
+  const head = `<tr><th>Song</th><th>Chart</th>${days
+    .map((d) => `<th>${escapeHtml(dayLabel(d))}</th>`)
+    .join("")}</tr>`;
+  const body = rows
+    .map((r) => {
+      const cells = r.cells
+        .map((v) => {
+          if (v == null) return "<td></td>";
+          const cls = [v.broken && "broken", v.score === r.rowBest && "best"].filter(Boolean).join(" ");
+          return `<td${cls ? ` class="${cls}"` : ""}>${v.score}</td>`;
+        })
+        .join("");
+      return `<tr><td>${escapeHtml(r.song)}</td><td>${escapeHtml(r.chart)}</td>${cells}</tr>`;
+    })
+    .join("");
+  $("score-grid").innerHTML = head + body;
 }
 
 async function finishSprint() {

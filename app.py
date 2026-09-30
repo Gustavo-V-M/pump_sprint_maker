@@ -230,10 +230,19 @@ def sprint_scores():
             "bestIsPass": best is not None,
         }
 
+    selected_charts = []
+    for cid in sorted(selected):
+        chart = _charts_by_id.get(cid)
+        if chart:
+            selected_charts.append(
+                {"id": cid, "song": chart["song"], "type": chart["type"], "level": chart["level"]}
+            )
+
     return jsonify(
         {
             "sprint": sprint,
             "plays": rows,
+            "charts": selected_charts,
             "summary": summary,
             "graceMinutes": GRACE_MINUTES if sprint["status"] != "active" else 0,
         }
