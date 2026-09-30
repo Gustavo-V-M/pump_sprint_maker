@@ -27,7 +27,6 @@ def _utcnow():
 def _parse_iso(value):
     if value is None:
         return None
-    value = value.replace("Z", "+00:00")
     dt = datetime.fromisoformat(value)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -54,7 +53,6 @@ class PiuClient:
         self._cache_ttl = int(os.environ.get("PIU_CACHE_TTL_SECONDS", "3600"))
         self._lock = threading.RLock()
         self._player_id = os.environ.get("PIU_SCORES_PLAYER_ID", "").strip() or None
-        self._max_journal_pages = int(os.environ.get("PIU_MAX_JOURNAL_PAGES", "8"))
 
     # ------------------------------------------------------------------ core
 
@@ -111,16 +109,6 @@ class PiuClient:
 
         return self._cached("mixes", load)
 
-    def songs(self, mix):
-        return self._cached(f"songs:{mix}", lambda: self._get_paged(
-            "/api/v2/songs", {"mix": mix, "limit": 500}
-        ))
-
-    def charts(self, mix):
-        return self._cached(f"charts:{mix}", lambda: self._get_paged(
-            "/api/v2/charts", {"mix": mix, "limit": 500}
-        ))
-
     def song_catalog(self, mix):
         """Songs on a mix joined with their charts, sorted for a dropdown.
 
@@ -130,8 +118,8 @@ class PiuClient:
                  chartIndex: {chartId: chartInfo}, errors: []}
         """
         def load():
-            songs = self.songs(mix)
-            charts = self.charts(mix)
+            songs = self._get_paged("/api/v2/songs", {"mix": mix, "limit": 500})
+            charts = self._get_paged("/api/v2/charts", {"mix": mix, "limit": 500})
             by_song = {s.get("name"): dict(s, charts=[]) for s in songs if s.get("name")}
             chart_index = {}
             for c in charts:
@@ -176,10 +164,8 @@ class PiuClient:
                 "Could not resolve a player: token has no `me` player and "
                 "no shared players were found."
             )
-        if len(players) > 1:
-            # Tool tokens can see several players; default to the first one.
-            # Set PIU_SCORES_PLAYER_ID to pin a specific player.
-            pass
+        # Multiple players visible (tool tokens)? Defaults to the first one;
+        # set PIU_SCORES_PLAYER_ID to pin a specific player.
         self._player_id = players[0].get("userId")
         return self._player_id
 
@@ -191,7 +177,7 @@ class PiuClient:
         rows = self._get_paged(
             f"/api/v2/players/{player}/journal",
             {"mix": mix, "since": since.strftime("%Y-%m-%dT%H:%M:%SZ"), "limit": 500},
-            max_pages=self._max_journal_pages,
+            max_pages=8,
         )
         for r in rows:
             r["_occurredAt"] = _parse_iso(r.get("occurredAt"))

@@ -56,10 +56,6 @@ function fmtClock(seconds) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function parseServerNow(iso) {
-  return Date.parse(iso);
-}
-
 /* ---------------------------------------------------------------- setup */
 
 async function loadMixes() {
@@ -96,13 +92,15 @@ async function loadSongs(mix) {
   renderSongList("");
 }
 
+function matches(song, q) {
+  return !q || song.name.toLowerCase().includes(q) || (song.artist || "").toLowerCase().includes(q);
+}
+
 function renderSongList(query) {
   const list = $("song-list");
   list.innerHTML = "";
   const q = query.trim().toLowerCase();
-  const songs = (state.catalog?.songs || []).filter(
-    (s) => !q || s.name.toLowerCase().includes(q) || (s.artist || "").toLowerCase().includes(q)
-  );
+  const songs = (state.catalog?.songs || []).filter((s) => matches(s, q));
   if (!songs.length) {
     list.innerHTML = '<div class="muted">No songs match.</div>';
     updateSongCount();
@@ -191,7 +189,7 @@ function renderChips(songs) {
 }
 
 function sprintEndMs(sprint) {
-  return parseServerNow(sprint.startedAt) + sprint.durationSeconds * 1000;
+  return Date.parse(sprint.startedAt) + sprint.durationSeconds * 1000;
 }
 
 function tickTimer() {
@@ -335,7 +333,7 @@ async function boot() {
   }
   try {
     const { sprint, serverNow } = await api("/api/sprint");
-    state.serverOffsetMs = parseServerNow(serverNow) - Date.now();
+    state.serverOffsetMs = Date.parse(serverNow) - Date.now();
     if (sprint && sprint.status === "active") {
       const endMs = sprintEndMs(sprint);
       if (endMs <= Date.now() + state.serverOffsetMs) {
@@ -389,9 +387,7 @@ $("song-search").addEventListener("input", (e) => renderSongList(e.target.value)
 $("select-all").addEventListener("click", () => {
   const q = $("song-search").value.trim().toLowerCase();
   (state.catalog?.songs || []).forEach((s) => {
-    if (!q || s.name.toLowerCase().includes(q) || (s.artist || "").toLowerCase().includes(q)) {
-      state.selected.add(s.name);
-    }
+    if (matches(s, q)) state.selected.add(s.name);
   });
   renderSongList(q);
 });

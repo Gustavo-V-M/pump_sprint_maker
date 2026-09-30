@@ -118,5 +118,4 @@ class SprintStore:
                         (now.strftime("%Y-%m-%dT%H:%M:%SZ"), row["id"]),
                     )
                     db.commit()
-                    return row["id"]
-        return None
+                    return

@@ -24,8 +24,8 @@ app = Flask(__name__)
 
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
 GRACE_MINUTES = int(os.environ.get("PIU_SCORES_GRACE_MINUTES", "10"))
-MIN_SPRINT_SECONDS = int(os.environ.get("MIN_SPRINT_SECONDS", "10"))
-MAX_SPRINT_SECONDS = int(os.environ.get("MAX_SPRINT_SECONDS", "7200"))
+MIN_SPRINT_SECONDS = 10
+MAX_SPRINT_SECONDS = 7200
 
 store = SprintStore(DATA_DIR)
 _client = None
