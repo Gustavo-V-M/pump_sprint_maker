@@ -13,6 +13,7 @@ Routes:
 
 import logging
 import os
+import secrets
 import threading
 from datetime import datetime, timedelta, timezone
 
@@ -29,6 +30,8 @@ DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "d
 GRACE_MINUTES = int(os.environ.get("PIU_SCORES_GRACE_MINUTES", "10"))
 MIN_SPRINT_SECONDS = 10
 MAX_SPRINT_SECONDS = 7200
+# Basic-auth password. Username is ignored.
+AUTH_TOKEN = os.environ.get("PIU_SCORES_TOKEN", "").strip()
 
 store = SprintStore(DATA_DIR)
 _client = None
@@ -47,6 +50,25 @@ def get_client():
 
 def _error(message, status=400):
     return jsonify({"error": message}), status
+
+
+@app.before_request
+def require_auth():
+    """HTTP Basic: any username, password must equal PIU_SCORES_TOKEN.
+
+    Skipped when no token is configured so the setup error stays visible.
+    """
+    if not AUTH_TOKEN:
+        return None
+    auth = request.authorization
+    if auth and auth.password and secrets.compare_digest(auth.password, AUTH_TOKEN):
+        return None
+    resp = jsonify({"error": "Unauthorized."})
+    resp.status_code = 401
+    # WWW-Authenticate makes the browser prompt natively and replay the
+    # credentials on every subsequent request to this origin.
+    resp.headers["WWW-Authenticate"] = 'Basic realm="Pump Sprints"'
+    return resp
 
 
 def _sprint_window(sprint):

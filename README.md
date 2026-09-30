@@ -15,6 +15,9 @@ A small webapp for timed Pump it Up score-chasing sprints, powered by the
 Your PIU Scores API token is read from the `PIU_SCORES_TOKEN` environment
 variable, so it never lives in the image.
 
+The app itself is protected by HTTP Basic auth: any username, with your
+`PIU_SCORES_TOKEN` as the password. Browsers will prompt once and replay it.
+
 With Docker Compose:
 
 ```bash
