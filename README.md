@@ -4,7 +4,7 @@ A small webapp for timed Pump it Up score-chasing sprints, powered by the
 [PIU Scores API](https://piuscores.arroweclip.se/swagger/index.html).
 
 - Define a sprint: pick a mix, choose songs (dropdown built from the PIU Scores
-  song catalog), set any sprint length you like.
+  song catalog), set a sprint length of 1–4 weeks.
 - While the sprint runs, a countdown shows your selected songs and live play counts.
 - When the sprint ends, the app fetches every play you made during the sprint
   window on those songs (via the `players/me/journal` endpoint) and shows the

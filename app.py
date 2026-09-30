@@ -28,7 +28,7 @@ app = Flask(__name__)
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
 GRACE_MINUTES = int(os.environ.get("PIU_SCORES_GRACE_MINUTES", "10"))
 MIN_SPRINT_SECONDS = 10
-MAX_SPRINT_SECONDS = 7200
+MAX_SPRINT_SECONDS = 28 * 86400
 
 store = SprintStore(DATA_DIR)
 _client = None
@@ -121,8 +121,8 @@ def create_sprint():
         return _error("Duration must be a number of seconds.")
     if not MIN_SPRINT_SECONDS <= duration <= MAX_SPRINT_SECONDS:
         return _error(
-            f"Duration must be between {MIN_SPRINT_SECONDS} and "
-            f"{MAX_SPRINT_SECONDS} seconds."
+            f"Sprint length must be between 10 seconds and "
+            f"{MAX_SPRINT_SECONDS // 86400} days."
         )
 
     # Songs must exist on the chosen mix so the score fetch can match charts.

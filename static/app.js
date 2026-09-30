@@ -49,11 +49,14 @@ async function api(path, options = {}) {
   return body;
 }
 
-function fmtClock(seconds) {
+function fmtDuration(seconds) {
   if (seconds < 0) seconds = 0;
-  const m = Math.floor(seconds / 60);
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  const clock = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return d > 0 ? `${d}d ${clock}` : clock;
 }
 
 /* ---------------------------------------------------------------- setup */
@@ -145,9 +148,8 @@ function updateSongCount() {
 /* ---------------------------------------------------------------- sprint */
 
 function selectedDuration() {
-  const m = parseInt($("duration-min").value || "0", 10);
-  const s = parseInt($("duration-sec").value || "0", 10);
-  return m * 60 + s;
+  const w = parseInt($("duration-weeks").value || "0", 10);
+  return w * 604800;
 }
 
 async function startSprint({ mix, songs, durationSeconds }) {
@@ -199,12 +201,12 @@ function tickTimer() {
   const end = sprintEndMs(sprint);
   const remaining = (end - now) / 1000;
   const total = sprint.durationSeconds;
-  $("timer").textContent = fmtClock(Math.ceil(remaining));
+  $("timer").textContent = fmtDuration(Math.ceil(remaining));
   const pct = Math.max(0, Math.min(100, ((total - remaining) / total) * 100));
   $("progress-bar").style.width = `${pct}%`;
   if (remaining <= 0 && !state.finished) {
     state.finished = true;
-    $("timer").textContent = "00:00";
+    $("timer").textContent = "00:00:00";
     finishSprint();
   }
 }
@@ -262,7 +264,7 @@ function renderResults(data) {
   const early = sprint.status === "ended_early";
   $("results-title").textContent = early ? "SPRINT ENDED" : "SPRINT COMPLETE";
   $("results-sub").textContent =
-    `${sprint.mix} · ${fmtClock(sprint.durationSeconds)} · ` +
+    `${sprint.mix} · ${fmtDuration(sprint.durationSeconds)} · ` +
     `${(data.plays || []).length} plays` +
     (data.graceMinutes ? ` · includes plays arriving up to ${data.graceMinutes} min after the end` : "");
 
@@ -368,8 +370,8 @@ async function boot() {
 $("setup-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const duration = selectedDuration();
-  if (duration < 10) {
-    showError("setup-error", "Sprint must be at least 10 seconds long.");
+  if (!duration) {
+    showError("setup-error", "Set a sprint length.");
     return;
   }
   if (state.selected.size === 0) {
@@ -397,9 +399,7 @@ $("clear-all").addEventListener("click", () => {
 });
 document.querySelectorAll(".presets button").forEach((btn) => {
   btn.addEventListener("click", () => {
-    const total = parseInt(btn.dataset.seconds, 10);
-    $("duration-min").value = Math.floor(total / 60);
-    $("duration-sec").value = total % 60;
+    $("duration-weeks").value = btn.dataset.weeks;
   });
 });
 $("end-early-btn").addEventListener("click", async () => {

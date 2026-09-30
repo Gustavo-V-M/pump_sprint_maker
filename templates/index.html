@@ -12,7 +12,7 @@
     <section id="view-setup" class="view hidden">
       <header class="hero">
         <h1>PUMP SPRINTS</h1>
-        <p class="tagline">Short timed sets. Pick your songs. Beat your bests.</p>
+        <p class="tagline">Week-long sprints. Pick your songs. Beat your bests.</p>
       </header>
 
       <div id="setup-error" class="banner error hidden"></div>
@@ -37,21 +37,15 @@
           <label>Sprint length</label>
           <div class="duration-row">
             <div class="duration-input">
-              <input id="duration-min" type="number" min="0" max="120" step="1" value="5" />
-              <span>min</span>
-            </div>
-            <div class="duration-input">
-              <input id="duration-sec" type="number" min="0" max="59" step="1" value="0" />
-              <span>sec</span>
+              <input id="duration-weeks" type="number" min="1" max="4" step="1" value="2" />
+              <span>weeks</span>
             </div>
           </div>
           <div class="presets">
-            <button type="button" data-seconds="60">1:00</button>
-            <button type="button" data-seconds="90">1:30</button>
-            <button type="button" data-seconds="120">2:00</button>
-            <button type="button" data-seconds="180">3:00</button>
-            <button type="button" data-seconds="300">5:00</button>
-            <button type="button" data-seconds="600">10:00</button>
+            <button type="button" data-weeks="1">1w</button>
+            <button type="button" data-weeks="2">2w</button>
+            <button type="button" data-weeks="3">3w</button>
+            <button type="button" data-weeks="4">4w</button>
           </div>
         </div>
 

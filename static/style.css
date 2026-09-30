@@ -277,6 +277,6 @@ button.danger {
 .results-actions button { padding: 14px; font-size: 1rem; }
 
 @media (max-width: 560px) {
-  .timer { font-size: 3.6rem; }
+  .timer { font-size: 2.8rem; }
   .hero h1 { font-size: 2.2rem; }
 }
