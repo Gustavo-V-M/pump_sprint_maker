@@ -19,4 +19,4 @@ RUN mkdir -p /app/data
 EXPOSE 8000
 
 # PIU_SCORES_TOKEN must be supplied at runtime (docker run -e / compose env), never baked in.
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 2 --threads 4 app:app"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 2 --threads 4 --access-logfile - app:app"]

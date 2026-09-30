@@ -4,12 +4,15 @@ Handles bearer-token auth from the environment, cursor paging, and an
 in-memory TTL cache for catalog data (mixes, songs, charts).
 """
 
+import logging
 import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 
 import requests
+
+log = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://piuscores.arroweclip.se"
 
@@ -60,9 +63,11 @@ class PiuClient:
         url = path if path.startswith("http") else self._base + path
         resp = self._session.get(url, params=params, timeout=30)
         if resp.status_code == 429 and retries > 0:
+            log.warning("429 from PIU API, retrying %s", url)
             time.sleep(2)
             return self._get(path, params, retries - 1)
         if resp.status_code != 200:
+            log.warning("PIU API %s for %s", resp.status_code, url)
             raise PiuApiError(
                 f"PIU Scores API returned {resp.status_code} for {url}",
                 status_code=resp.status_code,
@@ -155,9 +160,10 @@ class PiuClient:
         try:
             me = self._get("/api/v2/players/me")
             self._player_id = me.get("userId") or "me"
+            log.info("player resolved via `me`: %s", self._player_id)
             return self._player_id
         except PiuApiError:
-            pass
+            log.info("`me` unavailable for this token, falling back to /players")
         players = self._get_paged("/api/v2/players", {"limit": 500})
         if not players:
             raise PiuApiError(
@@ -167,6 +173,7 @@ class PiuClient:
         # Multiple players visible (tool tokens)? Defaults to the first one;
         # set PIU_SCORES_PLAYER_ID to pin a specific player.
         self._player_id = players[0].get("userId")
+        log.info("player resolved via /players fallback: %s", self._player_id)
         return self._player_id
 
     # --------------------------------------------------------------- journal

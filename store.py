@@ -1,11 +1,14 @@
 """SQLite-backed store for sprints."""
 
 import json
+import logging
 import os
 import sqlite3
 import threading
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
+
+log = logging.getLogger(__name__)
 
 
 def utcnow_iso():
@@ -118,4 +121,5 @@ class SprintStore:
                         (now.strftime("%Y-%m-%dT%H:%M:%SZ"), row["id"]),
                     )
                     db.commit()
+                    log.info("sprint %s auto-completed", row["id"])
                     return

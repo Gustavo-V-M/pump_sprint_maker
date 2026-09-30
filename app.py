@@ -11,6 +11,7 @@ Routes:
   GET  /api/sprint/scores   -> plays on the sprint's songs inside its window
 """
 
+import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,8 @@ from flask import Flask, jsonify, render_template, request
 
 from piu_api import PiuApiError, PiuClient, _utcnow
 from store import SprintStore
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 app = Flask(__name__)
 
@@ -134,6 +137,10 @@ def create_sprint():
         return _error(f"Unknown song(s) on {mix}: {', '.join(unknown)}")
 
     sprint = store.create(mix, songs, duration)
+    app.logger.info(
+        "sprint %s started: mix=%s songs=%d duration=%ds",
+        sprint["id"], mix, len(songs), duration,
+    )
     return jsonify({"sprint": sprint}), 201
 
 
@@ -146,6 +153,7 @@ def end_sprint():
     sprint = store.get(sprint["id"])
     if sprint and sprint["status"] == "active":
         sprint = store.end(sprint["id"], status="ended_early")
+        app.logger.info("sprint %s ended early", sprint["id"])
     return jsonify({"sprint": sprint})
 
 
