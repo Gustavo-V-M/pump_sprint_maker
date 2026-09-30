@@ -46,12 +46,9 @@ class PiuClient:
             )
         self._base = os.environ.get("PIU_SCORES_URL", DEFAULT_BASE_URL).rstrip("/")
         self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/json",
-            }
-        )
+        # HTTP Basic auth: the API ignores the username; the token is the password.
+        self._session.auth = ("piu-sprints", token)
+        self._session.headers.update({"Accept": "application/json"})
         self._cache = {}
         self._cache_ttl = int(os.environ.get("PIU_CACHE_TTL_SECONDS", "3600"))
         self._lock = threading.RLock()

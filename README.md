@@ -15,9 +15,6 @@ A small webapp for timed Pump it Up score-chasing sprints, powered by the
 Your PIU Scores API token is read from the `PIU_SCORES_TOKEN` environment
 variable, so it never lives in the image.
 
-The app itself is protected by HTTP Basic auth: any username, with your
-`PIU_SCORES_TOKEN` as the password. Browsers will prompt once and replay it.
-
 With Docker Compose:
 
 ```bash
@@ -45,7 +42,7 @@ PIU_SCORES_TOKEN=your_token python app.py
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PIU_SCORES_TOKEN` | — (required) | Bearer token for the PIU Scores API. |
+| `PIU_SCORES_TOKEN` | — (required) | Password for HTTP Basic auth to the PIU Scores API (the username is ignored). |
 | `PIU_SCORES_URL` | `https://piuscores.arroweclip.se` | API base URL. |
 | `PIU_SCORES_PLAYER_ID` | auto | Pin a player id. By default the app tries `me` and falls back to the one player your token can read. Set this if your tool key has access to several players. |
 | `PIU_SCORES_GRACE_MINUTES` | `10` | PIU Scores journals plays at import time, not exact play time, so finished sprints keep their score window open this many extra minutes. |
